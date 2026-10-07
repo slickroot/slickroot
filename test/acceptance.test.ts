@@ -40,14 +40,28 @@ function tempDir(prefix: string): string {
   return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 }
 
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
 function gitRepo(): string {
   const repo = tempDir("repo-");
-  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+  git(repo, "init", "-q", "-b", "main");
+  git(repo, "config", "user.name", "Maya");
+  git(repo, "config", "user.email", "maya@example.com");
   mkdirSync(join(repo, "docs", "specs"), { recursive: true });
   writeFileSync(join(repo, "docs", "specs", "001-existing.md"), "# Existing\n");
-  execFileSync("git", ["add", "."], { cwd: repo });
-  execFileSync("git", ["-c", "user.name=Maya", "-c", "user.email=maya@example.com", "commit", "-q", "-m", "Initial"], { cwd: repo });
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "Initial");
+  const remote = tempDir("remote-");
+  git(remote, "init", "-q", "--bare", "-b", "main");
+  git(repo, "remote", "add", "origin", remote);
+  git(repo, "push", "-q", "origin", "main");
   return repo;
+}
+
+function remoteOf(repo: string): string {
+  return git(repo, "remote", "get-url", "origin");
 }
 
 function configHome(repo: string, withGoal: boolean): string {
@@ -91,7 +105,8 @@ const countCall = (name) => {
   return calls;
 };
 const allowed = argv[argv.indexOf("--allowedTools") + 1];
-const isStoryStandIn = argv.includes("--append-system-prompt");
+const systemPrompt = argv.includes("--append-system-prompt") ? argv[argv.indexOf("--append-system-prompt") + 1] : undefined;
+const isStoryStandIn = systemPrompt !== undefined && systemPrompt.includes("## Goal");
 const isDesignQuestioner = allowed.includes("Edit(");
 const isDesignStandIn = !isStoryStandIn && argv.includes("--model");
 if (isStoryStandIn) {
@@ -176,6 +191,9 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   const designSection = spec.slice(spec.indexOf("## Technical Design"));
   assert.ok(designSection.includes(designText), designSection);
 
+  assert.equal(git(remoteOf(repo), "log", "-1", "--format=%s", "main"), `Add spec ${basename(specPath, ".md")}`);
+  assert.equal(git(remoteOf(repo), "show", `main:${relativeSpecPath}`), spec.trim());
+
   const runsDir = join(xdg, "slickroot", basename(repo), "runs");
   const runs = readdirSync(runsDir);
   const storiesRun = runs.find((name) => name.startsWith("stories-"));
@@ -219,9 +237,10 @@ test("one run turns the goal file into exactly one new spec and prints its path"
 
   const argvs = claude.argvs();
   const isDesignQuestioner = (argv: string[]) => containsSequence(argv, designerArgs(relativeSpecPath));
-  const isDesignStandIn = (argv: string[]) => containsSequence(argv, designStandInArgs()) && !argv.includes("--append-system-prompt");
-  const standInCalls = argvs.filter((argv) => argv.includes("--append-system-prompt"));
-  const questionerCalls = argvs.filter((argv) => !argv.includes("--append-system-prompt") && !isDesignQuestioner(argv) && !isDesignStandIn(argv));
+  const isDesignStandIn = (argv: string[]) => containsSequence(argv, designStandInArgs());
+  const isStandIn = (argv: string[]) => containsSequence(argv, standInArgs(standInPrompt, goal));
+  const standInCalls = argvs.filter(isStandIn);
+  const questionerCalls = argvs.filter((argv) => !isStandIn(argv) && !isDesignQuestioner(argv) && !isDesignStandIn(argv));
   const designQuestionerCalls = argvs.filter(isDesignQuestioner);
   const designStandInCalls = argvs.filter(isDesignStandIn);
   assert.equal(standInCalls.length, 2);
@@ -269,6 +288,8 @@ test("a failing design conversation fails the run but leaves the spec with its s
   const spec = readFileSync(join(repo, "docs", "specs", newSpecs[0]!), "utf8");
   assert.ok(spec.includes(storyText));
   assert.match(spec, /\n## Technical Design\n*$/);
+  assert.equal(git(remoteOf(repo), "log", "-1", "--format=%s", "main"), "Initial");
+  assert.equal(git(repo, "log", "-1", "--format=%s"), "Initial");
 });
 
 test("without a goal file nothing happens and claude is never called", () => {

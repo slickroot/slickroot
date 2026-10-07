@@ -6,7 +6,7 @@ import { GoalFile } from "./GoalFile.ts";
 
 const run = promisify(execFile);
 
-const requiredBranch = "main";
+export const requiredBranch = "main";
 
 export type PreflightOutcome =
   | { kind: "ready"; repo: string; goal: string; standInPrompt: string; specsDir: string }

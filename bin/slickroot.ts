@@ -8,6 +8,7 @@ import { StoryConversation } from "../src/StoryConversation.ts";
 import { Preflight } from "../src/Preflight.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { SpecFile } from "../src/SpecFile.ts";
+import { SpecPublisher } from "../src/SpecPublisher.ts";
 import { TerminalEcho } from "../src/TerminalEcho.ts";
 import { Transcript } from "../src/Transcript.ts";
 
@@ -40,6 +41,7 @@ try {
       transcript: designTranscript,
       stderr,
     }).run();
+    await SpecPublisher.in(process.cwd()).publish(relativeSpecPath);
     process.stdout.write(`${specPath}\n`);
   }
 } catch (error) {
