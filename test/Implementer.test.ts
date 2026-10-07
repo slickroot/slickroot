@@ -46,6 +46,15 @@ test("runs the implement skill on the spec with the sonnet model", async () => {
   assert.equal(argv![argv!.indexOf("--model") + 1], standInModel);
 });
 
+test("runs in auto mode so the unattended run can edit, test and commit", async () => {
+  const stub = stubClaude([finished("done")]);
+
+  await Implementer.for(new FakeEcho()).implement("docs/specs/002-x.md");
+
+  const [argv] = stub.argvs();
+  assert.equal(argv![argv!.indexOf("--permission-mode") + 1], "auto");
+});
+
 test("shows what claude says as it happens", async () => {
   stubClaude([said("Building slice one."), said("PR: https://example.com/pr/1"), finished("done")]);
   const echo = new FakeEcho();

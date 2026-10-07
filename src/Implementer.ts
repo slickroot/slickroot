@@ -22,7 +22,7 @@ export class Implementer {
   }
 
   async implement(relativeSpecPath: string): Promise<void> {
-    const args = ["-p", `${skill} ${relativeSpecPath}`, "--model", standInModel, "--output-format", "stream-json", "--verbose"];
+    const args = ["-p", `${skill} ${relativeSpecPath}`, "--model", standInModel, "--output-format", "stream-json", "--permission-mode", "auto", "--verbose"];
     const child = spawn(executable, args, { stdio: ["ignore", "pipe", "inherit"] });
     const exited = new Promise<number | null>((resolve, reject) => {
       child.once("error", reject);
