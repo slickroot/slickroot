@@ -15,7 +15,7 @@ export class ClaudeSessionError extends Error {
 
 export function questionerArgs(home: string): string[] {
   const newSpec = join(home, ".claude", "skills", "xp-stories", "scripts", "new-spec");
-  return ["--allowedTools", `${readOnlyTools} Bash(${newSpec}:*)`];
+  return ["--allowedTools", `${readOnlyTools} Bash(${newSpec}:*) Bash(scripts/new-spec:*)`];
 }
 
 export function standInArgs(standInPrompt: string, goal: string): string[] {

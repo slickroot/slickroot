@@ -52,7 +52,7 @@ The goal is kept outside the repo so the Questioner can never find it by explori
 **`Session`** is an interface, `send(message): Promise<string>`. It is the seam for unit tests (`FakeSession`).
 
 **`ClaudeSession`** implements `Session`. It knows the `session_id` (unset until the first reply) and its fixed CLI args. The first call runs `claude -p <message> --output-format json <args>`, and later calls add `--resume <session_id>`. It parses `session_id` and `result` from the JSON and throws on non-zero exit or `is_error`.
-- Questioner args: `--allowedTools "Read Grep Glob Bash(<abs path to ~/.claude/skills/xp-stories/scripts/new-spec>:*)"`. That is read-only exploration plus `new-spec`, with no `Edit`, no `Write` and no general Bash.
+- Questioner args: `--allowedTools "Read Grep Glob Bash(<abs path to ~/.claude/skills/xp-stories/scripts/new-spec>:*) Bash(scripts/new-spec:*)"`. That is read-only exploration plus `new-spec`, with no `Edit`, no `Write` and no general Bash. The relative form is allowed too because a repo with its own `scripts/new-spec` gets that copy run as `scripts/new-spec …`, which the absolute rule doesn't match, and a headless session can't ask for approval.
 - StandIn args: `--allowedTools "Read Grep Glob"` and `--append-system-prompt <stand-in.md + "\n\n## Goal\n\n" + goal>`. The goal reaches the StandIn only through its system prompt. The prompt tells the StandIn to read `docs/specs/` and the code itself to work out what already exists and steer towards the next missing step.
 
 **`SpecDirectory`** knows `docs/specs/` and the snapshot of file names taken before the run. `newFiles()` returns the files added since the snapshot.

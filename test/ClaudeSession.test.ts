@@ -92,7 +92,7 @@ test("questioner args allow read-only tools plus the new-spec script under the g
 
   assert.deepEqual(questionerArgs(home), [
     "--allowedTools",
-    `Read Grep Glob Bash(${join(home, ".claude", "skills", "xp-stories", "scripts", "new-spec")}:*)`,
+    `Read Grep Glob Bash(${join(home, ".claude", "skills", "xp-stories", "scripts", "new-spec")}:*) Bash(scripts/new-spec:*)`,
   ]);
 });
 

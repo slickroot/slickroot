@@ -87,7 +87,7 @@ if (argv.includes("--append-system-prompt")) {
     reply("questioner-session", script.question);
   } else {
     const allowed = argv[argv.indexOf("--allowedTools") + 1];
-    const newSpec = /Bash\\((.*):\\*\\)/.exec(allowed)[1];
+    const newSpec = /Bash\\((\\/.*?):\\*\\)/.exec(allowed)[1];
     const written = execFileSync(newSpec, [script.slug], { input: script.specBody, encoding: "utf8" }).trim();
     reply("questioner-session", "Wrote " + written);
   }
