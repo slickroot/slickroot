@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { DesignConversation } from "../src/DesignConversation.ts";
 import { SpecFile } from "../src/SpecFile.ts";
 import { Transcript } from "../src/Transcript.ts";
+import { FakeEcho } from "./support/FakeEcho.ts";
 import { FakeSession } from "./support/FakeSession.ts";
 
 const relativeSpecPath = "docs/specs/002-next.md";
@@ -15,7 +16,7 @@ const designText = "Add a Todo class.\n";
 function setup() {
   const specPath = join(mkdtempSync(join(tmpdir(), "spec-")), "002-next.md");
   writeFileSync(specPath, specWithoutDesign);
-  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "tech-design", new Date());
+  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "tech-design", new Date(), new FakeEcho());
   const writeDesign = () => appendFileSync(specPath, designText);
   return { specPath, transcript, writeDesign };
 }
