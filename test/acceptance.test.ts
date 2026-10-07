@@ -5,7 +5,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { questionerArgs, standInArgs } from "../src/ClaudeSession.ts";
+import { questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { opener } from "../src/Conversation.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const bin = join(root, "bin", "slickroot.ts");
@@ -13,6 +14,7 @@ const newSpecFixture = join(root, "test", "fixtures", "new-spec");
 
 const standInPrompt = "You answer in Maya's place. Read docs/specs/ and the code.\n";
 const goal = "A todo app that syncs across devices.\n";
+const topic = "Adding a todo from the terminal.";
 const question = "Who is the user and what do they want first?";
 const answer = "Maya wants to add a todo from the terminal.";
 const slug = "add-a-todo";
@@ -65,7 +67,7 @@ function fakeClaude(): { dir: string; argvs: () => string[][] } {
   const dir = tempDir("fake-claude-");
   const log = join(dir, "argv.jsonl");
   writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "commonjs" }));
-  writeFileSync(join(dir, "script.json"), JSON.stringify({ question, answer, slug, specBody }));
+  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody }));
   writeFileSync(
     join(dir, "claude"),
     `#!/usr/bin/env node
@@ -77,13 +79,16 @@ const argv = process.argv.slice(2);
 fs.appendFileSync(path.join(dir, "argv.jsonl"), JSON.stringify(argv) + "\\n");
 const script = JSON.parse(fs.readFileSync(path.join(dir, "script.json"), "utf8"));
 const reply = (sessionId, result) => process.stdout.write(JSON.stringify({ type: "result", is_error: false, session_id: sessionId, result }));
-if (argv.includes("--append-system-prompt")) {
-  reply("stand-in-session", script.answer);
-} else {
-  const counter = path.join(dir, "questioner-calls");
+const countCall = (name) => {
+  const counter = path.join(dir, name);
   const calls = (fs.existsSync(counter) ? Number(fs.readFileSync(counter, "utf8")) : 0) + 1;
   fs.writeFileSync(counter, String(calls));
-  if (calls === 1) {
+  return calls;
+};
+if (argv.includes("--append-system-prompt")) {
+  reply("stand-in-session", countCall("stand-in-calls") === 1 ? script.topic : script.answer);
+} else {
+  if (countCall("questioner-calls") === 1) {
     reply("questioner-session", script.question);
   } else {
     const allowed = argv[argv.indexOf("--allowedTools") + 1];
@@ -144,19 +149,27 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   const runs = readdirSync(runsDir);
   assert.equal(runs.length, 1);
   const transcript = readFileSync(join(runsDir, runs[0]!), "utf8");
+  assert.ok(transcript.startsWith(`## StandIn system prompt\n\n${standInSystemPrompt(standInPrompt, goal)}\n\n`), transcript);
+  assert.ok(transcript.includes(goal));
+  assert.ok(transcript.includes(opener));
+  assert.ok(transcript.includes(topic));
   assert.ok(transcript.includes(question));
   assert.ok(transcript.includes(answer));
 
   const argvs = claude.argvs();
   const standInCalls = argvs.filter((argv) => argv.includes("--append-system-prompt"));
   const questionerCalls = argvs.filter((argv) => !argv.includes("--append-system-prompt"));
-  assert.equal(standInCalls.length, 1);
+  assert.equal(standInCalls.length, 2);
   assert.equal(questionerCalls.length, 2);
+  assert.equal(standInCalls[0]![1], opener);
+  assert.equal(questionerCalls[0]![1], `/xp-stories ${topic}`);
   for (const argv of questionerCalls) {
+    assert.ok(!argv.includes("--model"), JSON.stringify(argv));
     assert.ok(containsSequence(argv, questionerArgs(home)), JSON.stringify(argv));
     assert.ok(argv.every((arg) => !arg.includes(goal.trim())), JSON.stringify(argv));
   }
   for (const argv of standInCalls) {
+    assert.ok(containsSequence(argv, ["--model", "claude-sonnet-5-5"]), JSON.stringify(argv));
     assert.ok(containsSequence(argv, standInArgs(standInPrompt, goal)), JSON.stringify(argv));
   }
 });

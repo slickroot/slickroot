@@ -7,6 +7,7 @@ const run = promisify(execFile);
 
 const executable = "claude";
 const readOnlyTools = "Read Grep Glob";
+const standInModel = "claude-sonnet-5-5";
 const maxBuffer = 64 * 1024 * 1024;
 
 export class ClaudeSessionError extends Error {
@@ -18,8 +19,19 @@ export function questionerArgs(home: string): string[] {
   return ["--allowedTools", `${readOnlyTools} Bash(${newSpec}:*) Bash(scripts/new-spec:*)`];
 }
 
+export function standInSystemPrompt(standInPrompt: string, goal: string): string {
+  return `${standInPrompt}\n\n## Goal\n\n${goal}`;
+}
+
 export function standInArgs(standInPrompt: string, goal: string): string[] {
-  return ["--allowedTools", readOnlyTools, "--append-system-prompt", `${standInPrompt}\n\n## Goal\n\n${goal}`];
+  return [
+    "--model",
+    standInModel,
+    "--allowedTools",
+    readOnlyTools,
+    "--append-system-prompt",
+    standInSystemPrompt(standInPrompt, goal),
+  ];
 }
 
 export class ClaudeSession implements Session {

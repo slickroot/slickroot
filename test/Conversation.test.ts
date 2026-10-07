@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation, ConversationError, maxTurns } from "../src/Conversation.ts";
+import { Conversation, ConversationError, maxTurns, opener } from "../src/Conversation.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { Transcript } from "../src/Transcript.ts";
 import { FakeSession } from "./support/FakeSession.ts";
@@ -47,7 +47,18 @@ test("returns the new spec as soon as the Questioner writes one", async () => {
 
   assert.equal(specPath, join(env.specsDir, "002-next.md"));
   assert.equal(questioner.received.length, 2);
-  assert.equal(standIn.received.length, 1);
+  assert.equal(standIn.received.length, 2);
+});
+
+test("opens by asking the StandIn for a topic and hands its answer to /xp-stories", async () => {
+  const env = setup();
+  const questioner = FakeSession.scripted([{ reply: "Spec written.", before: env.writeSpec("002-next.md") }]);
+  const standIn = FakeSession.replying("Adding a todo from the terminal.");
+
+  await conversation(questioner, standIn, env).run();
+
+  assert.deepEqual(standIn.received, [opener]);
+  assert.deepEqual(questioner.received, ["/xp-stories Adding a todo from the terminal."]);
 });
 
 test("passes messages between the sessions in order and records them", async () => {
@@ -57,16 +68,24 @@ test("passes messages between the sessions in order and records them", async () 
     { reply: "Q2" },
     { reply: "Q3", before: env.writeSpec("002-next.md") },
   ]);
-  const standIn = FakeSession.scripted([{ reply: "A1" }, { reply: "A2" }]);
+  const standIn = FakeSession.scripted([{ reply: "Topic" }, { reply: "A1" }, { reply: "A2" }]);
 
   await conversation(questioner, standIn, env).run();
 
-  assert.deepEqual(questioner.received, ["/xp-stories", "A1", "A2"]);
-  assert.deepEqual(standIn.received, ["Q1", "Q2"]);
-  const recorded = [...readFileSync(env.transcript.path, "utf8").matchAll(/## (\w+)\n\n(\w+)/g)].map(
+  assert.deepEqual(standIn.received, [opener, "Q1", "Q2"]);
+  assert.deepEqual(questioner.received, ["/xp-stories Topic", "A1", "A2"]);
+  const recorded = [...readFileSync(env.transcript.path, "utf8").matchAll(/^## (.+)\n\n(.*)$/gm)].map(
     ([, speaker, text]) => `${speaker}: ${text}`,
   );
-  assert.deepEqual(recorded, ["Questioner: Q1", "StandIn: A1", "Questioner: Q2", "StandIn: A2", "Questioner: Q3"]);
+  assert.deepEqual(recorded, [
+    `slickroot: ${opener}`,
+    "StandIn: Topic",
+    "Questioner: Q1",
+    "StandIn: A1",
+    "Questioner: Q2",
+    "StandIn: A2",
+    "Questioner: Q3",
+  ]);
 });
 
 test("writes one progress line per turn", async () => {

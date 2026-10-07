@@ -4,7 +4,9 @@ import type { Transcript } from "./Transcript.ts";
 
 export const maxTurns = 30;
 
-const opening = "/xp-stories";
+export const opener = "What should the next user story be about? Answer in one sentence.";
+
+const skill = "/xp-stories";
 
 export class ConversationError extends Error {
   override name = "ConversationError";
@@ -31,7 +33,11 @@ export class Conversation {
 
   async run(): Promise<string> {
     const { questioner, standIn, specs, transcript, stderr } = this.#participants;
-    let message = opening;
+    transcript.append("slickroot", opener);
+    const topic = await standIn.send(opener);
+    transcript.append("StandIn", topic);
+
+    let message = `${skill} ${topic}`;
     for (let turn = 1; turn <= maxTurns; turn++) {
       stderr(`turn ${turn}/${maxTurns}…\n`);
       const question = await questioner.send(message);

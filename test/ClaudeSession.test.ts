@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { ClaudeSession, ClaudeSessionError, questionerArgs, standInArgs } from "../src/ClaudeSession.ts";
+import { ClaudeSession, ClaudeSessionError, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
 
 type Reply = { exitCode?: number; stdout: string };
 
@@ -96,14 +96,20 @@ test("questioner args allow read-only tools plus the new-spec script under the g
   ]);
 });
 
-test("stand-in args allow read-only tools and append the role prompt followed by the goal", () => {
+test("stand-in system prompt is the role prompt followed by the goal", () => {
+  assert.equal(standInSystemPrompt("You answer in Maya's place.", "Ship the thing."), "You answer in Maya's place.\n\n## Goal\n\nShip the thing.");
+});
+
+test("stand-in args run on Sonnet, allow read-only tools and append the role prompt followed by the goal", () => {
   const prompt = "You answer in Maya's place.";
   const goal = "Ship the thing.";
 
   assert.deepEqual(standInArgs(prompt, goal), [
+    "--model",
+    "claude-sonnet-5-5",
     "--allowedTools",
     "Read Grep Glob",
     "--append-system-prompt",
-    `${prompt}\n\n## Goal\n\n${goal}`,
+    standInSystemPrompt(prompt, goal),
   ]);
 });

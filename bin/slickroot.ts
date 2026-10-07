@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { homedir } from "node:os";
-import { ClaudeSession } from "../src/ClaudeSession.ts";
+import { ClaudeSession, standInSystemPrompt } from "../src/ClaudeSession.ts";
 import { slickrootConfigDir } from "../src/configDir.ts";
 import { Conversation } from "../src/Conversation.ts";
 import { Preflight } from "../src/Preflight.ts";
@@ -15,11 +15,13 @@ try {
   const outcome = await Preflight.for(process.cwd(), configDir).run();
   if (outcome.kind === "ready") {
     const specs = SpecDirectory.snapshot(outcome.specsDir);
+    const transcript = Transcript.forRun(configDir, outcome.repo, new Date());
+    transcript.append("StandIn system prompt", standInSystemPrompt(outcome.standInPrompt, outcome.goal));
     const specPath = await Conversation.between({
       questioner: ClaudeSession.questioner(home),
       standIn: ClaudeSession.standIn(outcome.standInPrompt, outcome.goal),
       specs,
-      transcript: Transcript.forRun(configDir, outcome.repo, new Date()),
+      transcript,
       stderr,
     }).run();
     process.stdout.write(`${specPath}\n`);
