@@ -38,8 +38,14 @@ export function designerArgs(relativeSpecPath: string): string[] {
   return ["--allowedTools", `${readOnlyTools} Edit(${relativeSpecPath})`];
 }
 
+export const designStandInPrompt = `You are the project's architect. You're in a design discussion with a colleague about a user story. Together you are deciding its technical design, which developers will then implement from the spec. Your part is the thinking: the decisions and the reasons for them. Your colleague writes the design into the spec, and the developers write the code, so you have nothing to write or edit yourself.
+
+Before you answer, read the spec and the code. Follow the direction the code already takes: its structure, naming and idioms. Aim for readable code and a clean architecture: components with clear responsibilities, simple dependencies, and nothing beyond what the story needs.
+
+Treat it as a real discussion. The options you're offered are a starting point; if none of them is good enough, say so and propose a better one. Push back when something seems off, and ask a question back when you need one answered before you can decide.`;
+
 export function designStandInArgs(): string[] {
-  return ["--model", standInModel, "--allowedTools", readOnlyTools];
+  return ["--model", standInModel, "--allowedTools", readOnlyTools, "--append-system-prompt", designStandInPrompt];
 }
 
 export class ClaudeSession implements Session {

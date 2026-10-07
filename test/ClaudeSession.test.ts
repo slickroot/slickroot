@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { ClaudeSession, ClaudeSessionError, designStandInArgs, designerArgs, questionerArgs, standInArgs, standInModel, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { ClaudeSession, ClaudeSessionError, designStandInArgs, designStandInPrompt, designerArgs, questionerArgs, standInArgs, standInModel, standInSystemPrompt } from "../src/ClaudeSession.ts";
 
 type Reply = { exitCode?: number; stdout: string };
 
@@ -127,9 +127,13 @@ test("designer args allow neither Write nor Bash", () => {
   assert.doesNotMatch(allowed, /\bBash\b/);
 });
 
-test("design stand-in args run on the stand-in model with read-only tools and no appended system prompt", () => {
-  const args = designStandInArgs();
-
-  assert.deepEqual(args, ["--model", standInModel, "--allowedTools", "Read Grep Glob"]);
-  assert.ok(!args.includes("--append-system-prompt"));
+test("design stand-in args run on the stand-in model with read-only tools and the design stand-in prompt", () => {
+  assert.deepEqual(designStandInArgs(), [
+    "--model",
+    standInModel,
+    "--allowedTools",
+    "Read Grep Glob",
+    "--append-system-prompt",
+    designStandInPrompt,
+  ]);
 });
