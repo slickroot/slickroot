@@ -5,13 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation, ConversationError, maxTurns } from "../src/Conversation.ts";
 import { Transcript } from "../src/Transcript.ts";
+import { FakeEcho } from "./support/FakeEcho.ts";
 import { FakeSession } from "./support/FakeSession.ts";
 
 const label = "story";
 const firstMessage = "Begin here.";
 
 function setup() {
-  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "stories", new Date());
+  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "stories", new Date(), new FakeEcho());
   const progress: string[] = [];
   let finished = false;
   const finish = () => {

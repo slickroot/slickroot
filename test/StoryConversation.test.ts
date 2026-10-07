@@ -7,12 +7,13 @@ import { ConversationError } from "../src/Conversation.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { opener, StoryConversation } from "../src/StoryConversation.ts";
 import { Transcript } from "../src/Transcript.ts";
+import { FakeEcho } from "./support/FakeEcho.ts";
 import { FakeSession } from "./support/FakeSession.ts";
 
 function setup() {
   const specsDir = mkdtempSync(join(tmpdir(), "specs-"));
   writeFileSync(join(specsDir, "001-existing.md"), "# Existing\n");
-  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "stories", new Date());
+  const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "stories", new Date(), new FakeEcho());
   const writeSpec = (name: string) => () => writeFileSync(join(specsDir, name), "# Story\n");
   return { specsDir, transcript, writeSpec };
 }
