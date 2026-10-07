@@ -1,0 +1,55 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1791336361,
+        "narHash": "sha256-o9ZUW4SlEAvFPIyJWnqChhOT/VHpHg8TAvEgmqK1fSI=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7dd199b0e2993e37b4775ed66b1c291699608c9f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "types-node": "types-node",
+        "undici-types": "undici-types"
+      }
+    },
+    "types-node": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790894112,
+        "narHash": "sha256-E93EuH2zDUf92WfYtJ4Zjr+FaWbvtmngSBNUsskK0Gc=",
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/@types/node/-/node-24.19.1.tgz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/@types/node/-/node-24.19.1.tgz"
+      }
+    },
+    "undici-types": {
+      "flake": false,
+      "locked": {
+        "lastModified": 499162500,
+        "narHash": "sha256-8kk6imMKqG/HVYrnOxQ0CUR+jZamm2pvXBTrvjHDEZ4=",
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/undici-types/-/undici-types-7.24.6.tgz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://registry.npmjs.org/undici-types/-/undici-types-7.24.6.tgz"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

@@ -1,0 +1,10 @@
+{
+  "name": "slickroot",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.0",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit --typeRoots \"$NODE_TYPE_ROOTS\""
+  }
+}
