@@ -52,15 +52,15 @@ The goal is kept outside the repo so the Questioner can never find it by explori
 **`Session`** is an interface, `send(message): Promise<string>`. It is the seam for unit tests (`FakeSession`).
 
 **`ClaudeSession`** implements `Session`. It knows the `session_id` (unset until the first reply) and its fixed CLI args. The first call runs `claude -p <message> --output-format json <args>`, and later calls add `--resume <session_id>`. It parses `session_id` and `result` from the JSON and throws on non-zero exit or `is_error`.
-- Questioner args: `--allowedTools "Read Grep Glob Bash(<abs path to ~/.claude/skills/xp-stories/scripts/new-spec>:*)"`. That is read-only exploration plus `new-spec`, with no `Edit`, no `Write` and no general Bash.
-- StandIn args: `--allowedTools "Read Grep Glob"` and `--append-system-prompt <stand-in.md + "\n\n## Goal\n\n" + goal>`. The goal reaches the StandIn only through its system prompt. The prompt tells the StandIn to read `docs/specs/` and the code itself to work out what already exists and steer towards the next missing step.
+- Questioner args: `--allowedTools "Read Grep Glob Bash(<abs path to ~/.claude/skills/xp-stories/scripts/new-spec>:*) Bash(scripts/new-spec:*)"`. That is read-only exploration plus `new-spec`, with no `Edit`, no `Write` and no general Bash. The relative form is allowed too because a repo with its own `scripts/new-spec` gets that copy run as `scripts/new-spec …`, which the absolute rule doesn't match, and a headless session can't ask for approval.
+- StandIn args: `--model claude-sonnet-5-5`, `--allowedTools "Read Grep Glob"` and `--append-system-prompt <stand-in.md + "\n\n## Goal\n\n" + goal>`. The goal reaches the StandIn only through its system prompt. The prompt tells the StandIn to read `docs/specs/` and the code itself to work out what already exists and steer towards the next missing step.
 
 **`SpecDirectory`** knows `docs/specs/` and the snapshot of file names taken before the run. `newFiles()` returns the files added since the snapshot.
 
-**`Transcript`** knows its run file path. `append(speaker, text)` writes each message as it happens.
+**`Transcript`** knows its run file path. `append(speaker, text)` writes each message as it happens. `bin/slickroot.ts` records the StandIn's system prompt as the first entry, before the conversation starts, so the transcript shows everything the StandIn was given.
 
 **`Conversation`** collaborates with a Questioner `Session`, a StandIn `Session`, `SpecDirectory` and `Transcript`, and holds `maxTurns` (30).
-1. Send `/xp-stories` to the Questioner.
+1. Send the opener `What should the next user story be about? Answer in one sentence.` to the StandIn, and record both the opener and the StandIn's answer. Then send `/xp-stories <answer>` to the Questioner.
 2. After each Questioner reply, record it, then check `SpecDirectory.newFiles()`:
    - exactly one new file: done, return its path;
    - more than one: fail;
