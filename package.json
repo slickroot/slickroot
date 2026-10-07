@@ -2,6 +2,9 @@
   "name": "slickroot",
   "private": true,
   "type": "module",
+  "bin": {
+    "slickroot": "bin/slickroot.ts"
+  },
   "packageManager": "pnpm@12.9.0",
   "scripts": {
     "test": "node --test \"test/**/*.test.ts\"",

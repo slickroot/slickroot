@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+import { homedir } from "node:os";
+import { ClaudeSession } from "../src/ClaudeSession.ts";
+import { slickrootConfigDir } from "../src/configDir.ts";
+import { Conversation } from "../src/Conversation.ts";
+import { Preflight } from "../src/Preflight.ts";
+import { SpecDirectory } from "../src/SpecDirectory.ts";
+import { Transcript } from "../src/Transcript.ts";
+
+const stderr = (text: string) => process.stderr.write(text);
+
+try {
+  const home = homedir();
+  const configDir = slickrootConfigDir(process.env, home);
+  const outcome = await Preflight.for(process.cwd(), configDir).run();
+  if (outcome.kind === "ready") {
+    const specs = SpecDirectory.snapshot(outcome.specsDir);
+    const specPath = await Conversation.between({
+      questioner: ClaudeSession.questioner(home),
+      standIn: ClaudeSession.standIn(outcome.standInPrompt, outcome.goal),
+      specs,
+      transcript: Transcript.forRun(configDir, outcome.repo, new Date()),
+      stderr,
+    }).run();
+    process.stdout.write(`${specPath}\n`);
+  }
+} catch (error) {
+  stderr(`slickroot: ${(error as Error).message}\n`);
+  process.exitCode = 1;
+}
