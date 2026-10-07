@@ -27,7 +27,7 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [ pkgs.nodejs_24 pkgs.pnpm pkgs.typescript ];
+            packages = [ pkgs.git pkgs.nodejs_24 pkgs.pnpm pkgs.typescript ];
             NODE_TYPE_ROOTS = "${nodeTypes}/node_modules/@types";
           };
         });
