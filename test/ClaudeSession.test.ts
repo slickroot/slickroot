@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { ClaudeSession, ClaudeSessionError, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { ClaudeSession, ClaudeSessionError, designStandInArgs, designerArgs, questionerArgs, standInArgs, standInModel, standInSystemPrompt } from "../src/ClaudeSession.ts";
 
 type Reply = { exitCode?: number; stdout: string };
 
@@ -112,4 +112,24 @@ test("stand-in args run on Sonnet, allow read-only tools and append the role pro
     "--append-system-prompt",
     standInSystemPrompt(prompt, goal),
   ]);
+});
+
+test("designer args allow read-only tools plus editing only the given spec file", () => {
+  const spec = "docs/specs/002-story-with-technical-design.md";
+
+  assert.deepEqual(designerArgs(spec), ["--allowedTools", `Read Grep Glob Edit(${spec})`]);
+});
+
+test("designer args allow neither Write nor Bash", () => {
+  const allowed = designerArgs("docs/specs/002-x.md")[1] ?? "";
+
+  assert.doesNotMatch(allowed, /\bWrite\b/);
+  assert.doesNotMatch(allowed, /\bBash\b/);
+});
+
+test("design stand-in args run on the stand-in model with read-only tools and no appended system prompt", () => {
+  const args = designStandInArgs();
+
+  assert.deepEqual(args, ["--model", standInModel, "--allowedTools", "Read Grep Glob"]);
+  assert.ok(!args.includes("--append-system-prompt"));
 });
