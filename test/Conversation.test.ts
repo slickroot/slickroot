@@ -15,7 +15,7 @@ function tempDir(prefix: string): string {
 function setup() {
   const specsDir = tempDir("specs-");
   writeFileSync(join(specsDir, "001-existing.md"), "# Existing\n");
-  const transcript = Transcript.forRun(tempDir("config-"), "project", new Date());
+  const transcript = Transcript.forRun(tempDir("config-"), "project", "stories", new Date());
   const progress: string[] = [];
   const writeSpec = (name: string) => () => writeFileSync(join(specsDir, name), "# Story\n");
   return { specsDir, transcript, progress, writeSpec };

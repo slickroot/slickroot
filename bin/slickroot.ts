@@ -15,7 +15,7 @@ try {
   const outcome = await Preflight.for(process.cwd(), configDir).run();
   if (outcome.kind === "ready") {
     const specs = SpecDirectory.snapshot(outcome.specsDir);
-    const transcript = Transcript.forRun(configDir, outcome.repo, new Date());
+    const transcript = Transcript.forRun(configDir, outcome.repo, "stories", new Date());
     transcript.append("StandIn system prompt", standInSystemPrompt(outcome.standInPrompt, outcome.goal));
     const specPath = await Conversation.between({
       questioner: ClaudeSession.questioner(home),
