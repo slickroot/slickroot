@@ -5,6 +5,7 @@ import { ClaudeSession, standInSystemPrompt } from "../src/ClaudeSession.ts";
 import { slickrootConfigDir } from "../src/configDir.ts";
 import { DesignConversation } from "../src/DesignConversation.ts";
 import { StoryConversation } from "../src/StoryConversation.ts";
+import { Implementer } from "../src/Implementer.ts";
 import { Preflight } from "../src/Preflight.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { SpecFile } from "../src/SpecFile.ts";
@@ -42,7 +43,7 @@ try {
       stderr,
     }).run();
     await SpecPublisher.in(process.cwd()).publish(relativeSpecPath);
-    process.stdout.write(`${specPath}\n`);
+    await Implementer.for(echo).implement(relativeSpecPath);
   }
 } catch (error) {
   stderr(`slickroot: ${(error as Error).message}\n`);

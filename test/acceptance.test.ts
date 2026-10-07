@@ -5,7 +5,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { designerArgs, designStandInArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { standInModel, designerArgs, designStandInArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { skill as implementSkill } from "../src/Implementer.ts";
 import { maxTurns } from "../src/Conversation.ts";
 import { opener } from "../src/StoryConversation.ts";
 
@@ -23,6 +24,7 @@ const relativeSpecPath = join("docs", "specs", "002-add-a-todo.md");
 const designQuestion = "Where should the todo be stored?";
 const designAnswer = "In a plain file in the repo.";
 const designText = "Store todos as lines in todos.txt.";
+const prLink = "https://github.com/maya/todo/pull/7";
 const storyText = "Maya types one command and a todo is saved.";
 const specBody = `# Add a todo
 
@@ -82,11 +84,11 @@ function homeWithNewSpec(): string {
   return home;
 }
 
-function fakeClaude(designFails = false): { dir: string; argvs: () => string[][] } {
+function fakeClaude(designFails = false, implementFails = false): { dir: string; argvs: () => string[][] } {
   const dir = tempDir("fake-claude-");
   const log = join(dir, "argv.jsonl");
   writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "commonjs" }));
-  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody, designQuestion, designAnswer, designText, designFails }));
+  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody, designQuestion, designAnswer, designText, designFails, implementFails, prLink }));
   writeFileSync(
     join(dir, "claude"),
     `#!/usr/bin/env node
@@ -104,6 +106,17 @@ const countCall = (name) => {
   fs.writeFileSync(counter, String(calls));
   return calls;
 };
+const emit = (event) => process.stdout.write(JSON.stringify(event) + "\\n");
+if (argv[1].startsWith(${JSON.stringify(implementSkill)})) {
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Implementing the story." }] } });
+  if (script.implementFails) {
+    process.stderr.write("implementation failed\\n");
+    process.exit(1);
+  }
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "Opened " + script.prLink }] } });
+  emit({ type: "result", is_error: false, session_id: "implement-session", result: "Opened " + script.prLink });
+  process.exit(0);
+}
 const allowed = argv[argv.indexOf("--allowedTools") + 1];
 const systemPrompt = argv.includes("--append-system-prompt") ? argv[argv.indexOf("--append-system-prompt") + 1] : undefined;
 const isStoryStandIn = systemPrompt !== undefined && systemPrompt.includes("## Goal");
@@ -164,7 +177,7 @@ function containsSequence(haystack: readonly string[], needle: readonly string[]
   return haystack.some((_, start) => needle.every((item, offset) => haystack[start + offset] === item));
 }
 
-test("one run turns the goal file into exactly one new spec and prints its path", () => {
+test("one run turns the goal file into a designed spec, then builds the story and shows the PR link", () => {
   const repo = gitRepo();
   const xdg = configHome(repo, true);
   const home = homeWithNewSpec();
@@ -182,7 +195,7 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   const newSpecs = readdirSync(join(repo, "docs", "specs")).filter((name) => !specsBefore.includes(name));
   assert.equal(newSpecs.length, 1);
   const specPath = join(repo, "docs", "specs", newSpecs[0]!);
-  assert.equal(result.stdout, `${specPath}\n`);
+  assert.equal(result.stdout, "");
 
   const spec = readFileSync(specPath, "utf8");
   assert.ok(spec.includes(storyText));
@@ -235,12 +248,20 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   );
   assert.ok(!result.stderr.includes("\x1b["), result.stderr);
 
+  assert.ok(result.stderr.includes(prLink), result.stderr);
+  assert.ok(result.stderr.trimEnd().endsWith(`Opened ${prLink}`), result.stderr);
+
   const argvs = claude.argvs();
+  const implementCalls = argvs.filter((argv) => argv[1]?.startsWith(implementSkill));
+  assert.equal(implementCalls.length, 1);
+  assert.equal(implementCalls[0]![1], `${implementSkill} ${relativeSpecPath}`);
+  assert.ok(containsSequence(implementCalls[0]!, ["--model", standInModel]), JSON.stringify(implementCalls[0]));
+  assert.equal(argvs.at(-1), implementCalls[0]);
   const isDesignQuestioner = (argv: string[]) => containsSequence(argv, designerArgs(relativeSpecPath));
   const isDesignStandIn = (argv: string[]) => containsSequence(argv, designStandInArgs());
   const isStandIn = (argv: string[]) => containsSequence(argv, standInArgs(standInPrompt, goal));
   const standInCalls = argvs.filter(isStandIn);
-  const questionerCalls = argvs.filter((argv) => !isStandIn(argv) && !isDesignQuestioner(argv) && !isDesignStandIn(argv));
+  const questionerCalls = argvs.filter((argv) => !implementCalls.includes(argv) && !isStandIn(argv) && !isDesignQuestioner(argv) && !isDesignStandIn(argv));
   const designQuestionerCalls = argvs.filter(isDesignQuestioner);
   const designStandInCalls = argvs.filter(isDesignStandIn);
   assert.equal(standInCalls.length, 2);
@@ -290,6 +311,24 @@ test("a failing design conversation fails the run but leaves the spec with its s
   assert.match(spec, /\n## Technical Design\n*$/);
   assert.equal(git(remoteOf(repo), "log", "-1", "--format=%s", "main"), "Initial");
   assert.equal(git(repo, "log", "-1", "--format=%s"), "Initial");
+});
+
+test("a failing implementation fails the run after the spec is designed and published", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true);
+  const home = homeWithNewSpec();
+  const claude = fakeClaude(false, true);
+
+  const result = runSlickroot(repo, {
+    PATH: `${claude.dir}${delimiter}${process.env.PATH}`,
+    HOME: home,
+    XDG_CONFIG_HOME: xdg,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.ok(result.stderr.includes("slickroot:"), result.stderr);
+  assert.match(git(remoteOf(repo), "log", "-1", "--format=%s", "main"), /^Add spec /);
 });
 
 test("without a goal file nothing happens and claude is never called", () => {
