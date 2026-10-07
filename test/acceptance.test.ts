@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
-import { opener } from "../src/Conversation.ts";
+import { opener } from "../src/StoryConversation.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const bin = join(root, "bin", "slickroot.ts");

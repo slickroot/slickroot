@@ -2,7 +2,7 @@
 import { homedir } from "node:os";
 import { ClaudeSession, standInSystemPrompt } from "../src/ClaudeSession.ts";
 import { slickrootConfigDir } from "../src/configDir.ts";
-import { Conversation } from "../src/Conversation.ts";
+import { StoryConversation } from "../src/StoryConversation.ts";
 import { Preflight } from "../src/Preflight.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { Transcript } from "../src/Transcript.ts";
@@ -17,7 +17,7 @@ try {
     const specs = SpecDirectory.snapshot(outcome.specsDir);
     const transcript = Transcript.forRun(configDir, outcome.repo, "stories", new Date());
     transcript.append("StandIn system prompt", standInSystemPrompt(outcome.standInPrompt, outcome.goal));
-    const specPath = await Conversation.between({
+    const specPath = await StoryConversation.between({
       questioner: ClaudeSession.questioner(home),
       standIn: ClaudeSession.standIn(outcome.standInPrompt, outcome.goal),
       specs,
