@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { designerArgs, designStandInArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { maxTurns } from "../src/Conversation.ts";
 import { opener } from "../src/StoryConversation.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -138,6 +139,12 @@ function runSlickroot(repo: string, env: Record<string, string>) {
   return spawnSync(bin, [], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" });
 }
 
+function blocks(markdown: string): string[] {
+  return markdown
+    .split(/(?=^## )/m)
+    .filter((block) => block.startsWith("## "));
+}
+
 function containsSequence(haystack: readonly string[], needle: readonly string[]): boolean {
   return haystack.some((_, start) => needle.every((item, offset) => haystack[start + offset] === item));
 }
@@ -177,8 +184,9 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   assert.ok(storiesRun !== undefined && designRun !== undefined, runs.join(", "));
   assert.equal(storiesRun.replace("stories-", ""), designRun.replace("tech-design-", ""));
 
+  const systemPromptBlock = `## StandIn system prompt\n\n${standInSystemPrompt(standInPrompt, goal)}\n\n`;
   const storiesTranscript = readFileSync(join(runsDir, storiesRun), "utf8");
-  assert.ok(storiesTranscript.startsWith(`## StandIn system prompt\n\n${standInSystemPrompt(standInPrompt, goal)}\n\n`), storiesTranscript);
+  assert.ok(storiesTranscript.startsWith(systemPromptBlock), storiesTranscript);
   assert.ok(storiesTranscript.includes(goal));
   assert.ok(storiesTranscript.includes(opener));
   assert.ok(storiesTranscript.includes(topic));
@@ -190,6 +198,24 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   assert.ok(designTranscript.includes(designQuestion));
   assert.ok(designTranscript.includes(designAnswer));
   assert.ok(!designTranscript.includes(goal.trim()));
+
+  const firstStoryQuestion = `## Questioner\n\n${question}\n\n`;
+  const firstDesignQuestion = `## Questioner\n\n${designQuestion}\n\n`;
+  assert.ok(result.stderr.startsWith(systemPromptBlock), result.stderr);
+  for (const transcript of [storiesTranscript, designTranscript]) {
+    for (const block of blocks(transcript)) {
+      assert.ok(result.stderr.includes(block), block);
+    }
+  }
+  assert.ok(
+    result.stderr.indexOf(`story turn 1/${maxTurns}…`) < result.stderr.indexOf(firstStoryQuestion),
+    result.stderr,
+  );
+  assert.ok(
+    result.stderr.indexOf(`design turn 1/${maxTurns}…`) < result.stderr.indexOf(firstDesignQuestion),
+    result.stderr,
+  );
+  assert.ok(!result.stderr.includes("\x1b["), result.stderr);
 
   const argvs = claude.argvs();
   const isDesignQuestioner = (argv: string[]) => containsSequence(argv, designerArgs(relativeSpecPath));

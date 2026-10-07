@@ -8,6 +8,7 @@ import { StoryConversation } from "../src/StoryConversation.ts";
 import { Preflight } from "../src/Preflight.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { SpecFile } from "../src/SpecFile.ts";
+import { TerminalEcho } from "../src/TerminalEcho.ts";
 import { Transcript } from "../src/Transcript.ts";
 
 const stderr = (text: string) => process.stderr.write(text);
@@ -19,8 +20,9 @@ try {
   if (outcome.kind === "ready") {
     const specs = SpecDirectory.snapshot(outcome.specsDir);
     const startedAt = new Date();
-    const storiesTranscript = Transcript.forRun(configDir, outcome.repo, "stories", startedAt);
-    const designTranscript = Transcript.forRun(configDir, outcome.repo, "tech-design", startedAt);
+    const echo = TerminalEcho.for(process.stderr);
+    const storiesTranscript = Transcript.forRun(configDir, outcome.repo, "stories", startedAt, echo);
+    const designTranscript = Transcript.forRun(configDir, outcome.repo, "tech-design", startedAt, echo);
     storiesTranscript.append("StandIn system prompt", standInSystemPrompt(outcome.standInPrompt, outcome.goal));
     const specPath = await StoryConversation.between({
       questioner: ClaudeSession.questioner(home),
