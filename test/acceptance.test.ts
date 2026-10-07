@@ -5,8 +5,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
-import { opener } from "../src/Conversation.ts";
+import { designerArgs, designStandInArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { opener } from "../src/StoryConversation.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const bin = join(root, "bin", "slickroot.ts");
@@ -18,6 +18,10 @@ const topic = "Adding a todo from the terminal.";
 const question = "Who is the user and what do they want first?";
 const answer = "Maya wants to add a todo from the terminal.";
 const slug = "add-a-todo";
+const relativeSpecPath = join("docs", "specs", "002-add-a-todo.md");
+const designQuestion = "Where should the todo be stored?";
+const designAnswer = "In a plain file in the repo.";
+const designText = "Store todos as lines in todos.txt.";
 const storyText = "Maya types one command and a todo is saved.";
 const specBody = `# Add a todo
 
@@ -63,11 +67,11 @@ function homeWithNewSpec(): string {
   return home;
 }
 
-function fakeClaude(): { dir: string; argvs: () => string[][] } {
+function fakeClaude(designFails = false): { dir: string; argvs: () => string[][] } {
   const dir = tempDir("fake-claude-");
   const log = join(dir, "argv.jsonl");
   writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "commonjs" }));
-  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody }));
+  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody, designQuestion, designAnswer, designText, designFails }));
   writeFileSync(
     join(dir, "claude"),
     `#!/usr/bin/env node
@@ -85,13 +89,31 @@ const countCall = (name) => {
   fs.writeFileSync(counter, String(calls));
   return calls;
 };
-if (argv.includes("--append-system-prompt")) {
+const allowed = argv[argv.indexOf("--allowedTools") + 1];
+const isStoryStandIn = argv.includes("--append-system-prompt");
+const isDesignQuestioner = allowed.includes("Edit(");
+const isDesignStandIn = !isStoryStandIn && argv.includes("--model");
+if (isStoryStandIn) {
   reply("stand-in-session", countCall("stand-in-calls") === 1 ? script.topic : script.answer);
+} else if (isDesignStandIn) {
+  reply("design-stand-in-session", script.designAnswer);
+} else if (isDesignQuestioner) {
+  if (script.designFails) {
+    process.stderr.write("design failed\\n");
+    process.exit(1);
+  }
+  if (countCall("design-questioner-calls") === 1) {
+    reply("design-questioner-session", script.designQuestion);
+  } else {
+    const specPath = path.resolve(process.cwd(), /Edit\\((.*?)\\)/.exec(allowed)[1]);
+    const spec = fs.readFileSync(specPath, "utf8");
+    fs.writeFileSync(specPath, spec.replace(/## Technical Design\\n*$/, "## Technical Design\\n\\n" + script.designText + "\\n"));
+    reply("design-questioner-session", "Designed " + specPath);
+  }
 } else {
   if (countCall("questioner-calls") === 1) {
     reply("questioner-session", script.question);
   } else {
-    const allowed = argv[argv.indexOf("--allowedTools") + 1];
     const newSpec = /Bash\\((\\/.*?):\\*\\)/.exec(allowed)[1];
     const written = execFileSync(newSpec, [script.slug], { input: script.specBody, encoding: "utf8" }).trim();
     reply("questioner-session", "Wrote " + written);
@@ -143,26 +165,47 @@ test("one run turns the goal file into exactly one new spec and prints its path"
   const spec = readFileSync(specPath, "utf8");
   assert.ok(spec.includes(storyText));
   assert.match(spec, /^## Acceptance Criteria\n\n(- .+\n)+/m);
-  assert.match(spec, /\n## Technical Design\n*$/);
+
+  const designSection = spec.slice(spec.indexOf("## Technical Design"));
+  assert.ok(designSection.includes(designText), designSection);
 
   const runsDir = join(xdg, "slickroot", basename(repo), "runs");
   const runs = readdirSync(runsDir);
-  assert.equal(runs.length, 1);
-  const transcript = readFileSync(join(runsDir, runs[0]!), "utf8");
-  assert.ok(transcript.startsWith(`## StandIn system prompt\n\n${standInSystemPrompt(standInPrompt, goal)}\n\n`), transcript);
-  assert.ok(transcript.includes(goal));
-  assert.ok(transcript.includes(opener));
-  assert.ok(transcript.includes(topic));
-  assert.ok(transcript.includes(question));
-  assert.ok(transcript.includes(answer));
+  const storiesRun = runs.find((name) => name.startsWith("stories-"));
+  const designRun = runs.find((name) => name.startsWith("tech-design-"));
+  assert.equal(runs.length, 2);
+  assert.ok(storiesRun !== undefined && designRun !== undefined, runs.join(", "));
+  assert.equal(storiesRun.replace("stories-", ""), designRun.replace("tech-design-", ""));
+
+  const storiesTranscript = readFileSync(join(runsDir, storiesRun), "utf8");
+  assert.ok(storiesTranscript.startsWith(`## StandIn system prompt\n\n${standInSystemPrompt(standInPrompt, goal)}\n\n`), storiesTranscript);
+  assert.ok(storiesTranscript.includes(goal));
+  assert.ok(storiesTranscript.includes(opener));
+  assert.ok(storiesTranscript.includes(topic));
+  assert.ok(storiesTranscript.includes(question));
+  assert.ok(storiesTranscript.includes(answer));
+
+  const designTranscript = readFileSync(join(runsDir, designRun), "utf8");
+  assert.ok(designTranscript.startsWith(`## slickroot\n\n/xp-tech-design ${relativeSpecPath}\n\n`), designTranscript);
+  assert.ok(designTranscript.includes(designQuestion));
+  assert.ok(designTranscript.includes(designAnswer));
+  assert.ok(!designTranscript.includes(goal.trim()));
 
   const argvs = claude.argvs();
+  const isDesignQuestioner = (argv: string[]) => containsSequence(argv, designerArgs(relativeSpecPath));
+  const isDesignStandIn = (argv: string[]) => containsSequence(argv, designStandInArgs()) && !argv.includes("--append-system-prompt");
   const standInCalls = argvs.filter((argv) => argv.includes("--append-system-prompt"));
-  const questionerCalls = argvs.filter((argv) => !argv.includes("--append-system-prompt"));
+  const questionerCalls = argvs.filter((argv) => !argv.includes("--append-system-prompt") && !isDesignQuestioner(argv) && !isDesignStandIn(argv));
+  const designQuestionerCalls = argvs.filter(isDesignQuestioner);
+  const designStandInCalls = argvs.filter(isDesignStandIn);
   assert.equal(standInCalls.length, 2);
   assert.equal(questionerCalls.length, 2);
+  assert.equal(designQuestionerCalls.length, 2);
+  assert.equal(designStandInCalls.length, 1);
   assert.equal(standInCalls[0]![1], opener);
   assert.equal(questionerCalls[0]![1], `/xp-stories ${topic}`);
+  assert.equal(designQuestionerCalls[0]![1], `/xp-tech-design ${relativeSpecPath}`);
+  assert.equal(designStandInCalls[0]![1], designQuestion);
   for (const argv of questionerCalls) {
     assert.ok(!argv.includes("--model"), JSON.stringify(argv));
     assert.ok(containsSequence(argv, questionerArgs(home)), JSON.stringify(argv));
@@ -172,6 +215,34 @@ test("one run turns the goal file into exactly one new spec and prints its path"
     assert.ok(containsSequence(argv, ["--model", "claude-sonnet-5-5"]), JSON.stringify(argv));
     assert.ok(containsSequence(argv, standInArgs(standInPrompt, goal)), JSON.stringify(argv));
   }
+  assert.ok(!designQuestionerCalls[0]!.includes("--resume"), JSON.stringify(designQuestionerCalls[0]));
+  assert.ok(!designStandInCalls[0]!.includes("--resume"), JSON.stringify(designStandInCalls[0]));
+  for (const argv of [...designQuestionerCalls, ...designStandInCalls]) {
+    assert.ok(argv.every((arg) => !arg.includes(goal.trim())), JSON.stringify(argv));
+  }
+});
+
+test("a failing design conversation fails the run but leaves the spec with its story", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true);
+  const home = homeWithNewSpec();
+  const claude = fakeClaude(true);
+  const specsBefore = readdirSync(join(repo, "docs", "specs"));
+
+  const result = runSlickroot(repo, {
+    PATH: `${claude.dir}${delimiter}${process.env.PATH}`,
+    HOME: home,
+    XDG_CONFIG_HOME: xdg,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.notEqual(result.stderr, "");
+  const newSpecs = readdirSync(join(repo, "docs", "specs")).filter((name) => !specsBefore.includes(name));
+  assert.equal(newSpecs.length, 1);
+  const spec = readFileSync(join(repo, "docs", "specs", newSpecs[0]!), "utf8");
+  assert.ok(spec.includes(storyText));
+  assert.match(spec, /\n## Technical Design\n*$/);
 });
 
 test("without a goal file nothing happens and claude is never called", () => {

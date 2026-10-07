@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export class Transcript {
@@ -8,9 +8,12 @@ export class Transcript {
     this.path = path;
   }
 
-  static forRun(configDir: string, repo: string, startedAt: Date): Transcript {
+  static forRun(configDir: string, repo: string, prefix: string, startedAt: Date): Transcript {
     const timestamp = startedAt.toISOString().replaceAll(":", "-");
-    return new Transcript(join(configDir, repo, "runs", `${timestamp}.md`));
+    const path = join(configDir, repo, "runs", `${prefix}-${timestamp}.md`);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "");
+    return new Transcript(path);
   }
 
   append(speaker: string, text: string): void {

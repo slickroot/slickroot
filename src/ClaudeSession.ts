@@ -7,7 +7,7 @@ const run = promisify(execFile);
 
 const executable = "claude";
 const readOnlyTools = "Read Grep Glob";
-const standInModel = "claude-sonnet-5-5";
+export const standInModel = "claude-sonnet-5-5";
 const maxBuffer = 64 * 1024 * 1024;
 
 export class ClaudeSessionError extends Error {
@@ -34,6 +34,14 @@ export function standInArgs(standInPrompt: string, goal: string): string[] {
   ];
 }
 
+export function designerArgs(relativeSpecPath: string): string[] {
+  return ["--allowedTools", `${readOnlyTools} Edit(${relativeSpecPath})`];
+}
+
+export function designStandInArgs(): string[] {
+  return ["--model", standInModel, "--allowedTools", readOnlyTools];
+}
+
 export class ClaudeSession implements Session {
   readonly #args: readonly string[];
   #sessionId: string | undefined;
@@ -52,6 +60,14 @@ export class ClaudeSession implements Session {
 
   static standIn(standInPrompt: string, goal: string): ClaudeSession {
     return new ClaudeSession(standInArgs(standInPrompt, goal));
+  }
+
+  static designer(relativeSpecPath: string): ClaudeSession {
+    return new ClaudeSession(designerArgs(relativeSpecPath));
+  }
+
+  static designStandIn(): ClaudeSession {
+    return new ClaudeSession(designStandInArgs());
   }
 
   async send(message: string): Promise<string> {
