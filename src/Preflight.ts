@@ -6,6 +6,15 @@ import { GoalFile } from "./GoalFile.ts";
 
 const run = promisify(execFile);
 
+export async function repoName(cwd: string): Promise<string> {
+  return basename(await git(cwd, "rev-parse", "--show-toplevel"));
+}
+
+async function git(cwd: string, ...args: string[]): Promise<string> {
+  const { stdout } = await run("git", args, { cwd });
+  return stdout.trim();
+}
+
 export const requiredBranch = "main";
 
 export type PreflightOutcome =
@@ -53,8 +62,7 @@ export class Preflight {
 
   async #git(...args: string[]): Promise<string | undefined> {
     try {
-      const { stdout } = await run("git", args, { cwd: this.#cwd });
-      return stdout.trim();
+      return await git(this.#cwd, ...args);
     } catch {
       return undefined;
     }
