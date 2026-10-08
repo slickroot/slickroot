@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export class GoalFile {
@@ -19,5 +19,9 @@ export class GoalFile {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
       throw error;
     }
+  }
+
+  write(content: string): void {
+    writeFileSync(this.path, content);
   }
 }

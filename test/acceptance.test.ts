@@ -15,7 +15,41 @@ const bin = join(root, "bin", "slickroot.ts");
 const newSpecFixture = join(root, "test", "fixtures", "new-spec");
 
 const standInPrompt = "You answer in Maya's place. Read docs/specs/ and the code.\n";
-const goal = "A todo app that syncs across devices.\n";
+const keeperRole = "You are the project's goal keeper.";
+const goal = [
+  "# Goal",
+  "",
+  "A todo app that syncs across devices.",
+  "",
+  "#done",
+  "",
+  "#backlog",
+  "",
+  "- Add a todo from the terminal",
+  "* Sync todos across devices",
+  "- Show the list of todos",
+  "",
+].join("\n");
+const updatedGoal = [
+  "# Goal",
+  "",
+  "A todo app that syncs across devices.",
+  "",
+  "#done",
+  "- Add a todo from the terminal",
+  "* Sync todos across devices",
+  "",
+  "#backlog",
+  "",
+  "* Resolve conflicts on sync",
+  "- Show the list of todos",
+  "",
+].join("\n");
+const verdicts = JSON.stringify({
+  1: { verdict: "done" },
+  2: { verdict: "partial", done: "Sync todos across devices", leftover: "Resolve conflicts on sync" },
+  3: { verdict: "untouched" },
+});
 const topic = "Adding a todo from the terminal.";
 const question = "Who is the user and what do they want first?";
 const answer = "Maya wants to add a todo from the terminal.";
@@ -66,12 +100,13 @@ function remoteOf(repo: string): string {
   return git(repo, "remote", "get-url", "origin");
 }
 
-function configHome(repo: string, withGoal: boolean): string {
+function configHome(repo: string, withGoal: boolean, withKeeper = false): string {
   const xdg = tempDir("xdg-");
   const config = join(xdg, "slickroot");
   mkdirSync(join(config, basename(repo)), { recursive: true });
   writeFileSync(join(config, "stand-in.md"), standInPrompt);
   if (withGoal) writeFileSync(join(config, basename(repo), "goal.md"), goal);
+  if (withKeeper) writeFileSync(join(config, "goal-keeper.md"), keeperRole);
   return xdg;
 }
 
@@ -88,7 +123,7 @@ function fakeClaude(designFails = false, implementFails = false): { dir: string;
   const dir = tempDir("fake-claude-");
   const log = join(dir, "argv.jsonl");
   writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "commonjs" }));
-  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody, designQuestion, designAnswer, designText, designFails, implementFails, prLink }));
+  writeFileSync(join(dir, "script.json"), JSON.stringify({ topic, question, answer, slug, specBody, designQuestion, designAnswer, designText, designFails, implementFails, prLink, keeperRole, verdicts }));
   writeFileSync(
     join(dir, "claude"),
     `#!/usr/bin/env node
@@ -115,6 +150,10 @@ if (argv[1].startsWith(${JSON.stringify(implementSkill)})) {
   }
   emit({ type: "assistant", message: { content: [{ type: "text", text: "Opened " + script.prLink }] } });
   emit({ type: "result", is_error: false, session_id: "implement-session", result: "Opened " + script.prLink });
+  process.exit(0);
+}
+if (argv[1].startsWith(script.keeperRole)) {
+  reply("goal-keeper-session", script.verdicts);
   process.exit(0);
 }
 const allowed = argv[argv.indexOf("--allowedTools") + 1];
@@ -163,8 +202,8 @@ if (isStoryStandIn) {
   };
 }
 
-function runSlickroot(repo: string, env: Record<string, string>) {
-  return spawnSync(bin, [], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" });
+function runSlickroot(repo: string, env: Record<string, string>, args: string[] = []) {
+  return spawnSync(bin, args, { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" });
 }
 
 function blocks(markdown: string): string[] {
@@ -329,6 +368,100 @@ test("a failing implementation fails the run after the spec is designed and publ
   assert.equal(result.stdout, "");
   assert.ok(result.stderr.includes("slickroot:"), result.stderr);
   assert.match(git(remoteOf(repo), "log", "-1", "--format=%s", "main"), /^Add spec /);
+});
+
+function goalPath(xdg: string, repo: string): string {
+  return join(xdg, "slickroot", basename(repo), "goal.md");
+}
+
+function goalRuns(xdg: string, repo: string): string[] {
+  return readdirSync(join(xdg, "slickroot", basename(repo), "runs")).filter((name) => name.startsWith("goal-"));
+}
+
+test("the goal-keeper command moves a built backlog line to #done and splits a partly built one", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true, true);
+  const claude = fakeClaude();
+
+  const result = runSlickroot(
+    repo,
+    { PATH: `${claude.dir}${delimiter}${process.env.PATH}`, XDG_CONFIG_HOME: xdg },
+    ["goal-keeper", join("docs", "specs", "001-existing.md")],
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+  assert.equal(readFileSync(goalPath(xdg, repo), "utf8"), updatedGoal);
+
+  const runs = goalRuns(xdg, repo);
+  assert.equal(runs.length, 1);
+  const transcript = readFileSync(join(xdg, "slickroot", basename(repo), "runs", runs[0]!), "utf8");
+  assert.ok(transcript.startsWith(`## slickroot\n\n${keeperRole}\n\n`), transcript);
+  assert.ok(transcript.includes("# #backlog"), transcript);
+  assert.ok(transcript.includes("# spec"), transcript);
+  assert.ok(transcript.endsWith(`## GoalKeeper\n\n${verdicts}\n\n`), transcript);
+
+  const argvs = claude.argvs();
+  assert.equal(argvs.length, 1);
+  assert.equal(argvs[0]![0], "-p");
+  assert.ok(argvs[0]![1].startsWith(keeperRole), argvs[0]![1]);
+  assert.ok(containsSequence(argvs[0]!, ["--model", standInModel]), JSON.stringify(argvs[0]));
+});
+
+test("the full run records goal progress once the pull request is opened", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true, true);
+  const home = homeWithNewSpec();
+  const claude = fakeClaude();
+
+  const result = runSlickroot(repo, {
+    PATH: `${claude.dir}${delimiter}${process.env.PATH}`,
+    HOME: home,
+    XDG_CONFIG_HOME: xdg,
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stderr.includes(prLink), result.stderr);
+  assert.equal(readFileSync(goalPath(xdg, repo), "utf8"), updatedGoal);
+  assert.equal(goalRuns(xdg, repo).length, 1);
+  assert.ok(result.stderr.indexOf(prLink) < result.stderr.indexOf(keeperRole), result.stderr);
+});
+
+test("a failing implementation leaves the goal file exactly as it was", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true, true);
+  const home = homeWithNewSpec();
+  const claude = fakeClaude(false, true);
+
+  const result = runSlickroot(repo, {
+    PATH: `${claude.dir}${delimiter}${process.env.PATH}`,
+    HOME: home,
+    XDG_CONFIG_HOME: xdg,
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.equal(readFileSync(goalPath(xdg, repo), "utf8"), goal);
+  assert.deepEqual(goalRuns(xdg, repo), []);
+  assert.ok(!result.stderr.includes(keeperRole), result.stderr);
+});
+
+test("the goal-keeper command without a goal-keeper.md is a silent no-op", () => {
+  const repo = gitRepo();
+  const xdg = configHome(repo, true);
+  const claude = fakeClaude();
+
+  const result = runSlickroot(
+    repo,
+    { PATH: `${claude.dir}${delimiter}${process.env.PATH}`, XDG_CONFIG_HOME: xdg },
+    ["goal-keeper", join("docs", "specs", "001-existing.md")],
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+  assert.equal(readFileSync(goalPath(xdg, repo), "utf8"), goal);
+  assert.deepEqual(claude.argvs(), []);
+  assert.equal(existsSync(join(xdg, "slickroot", basename(repo), "runs")), false);
 });
 
 test("without a goal file nothing happens and claude is never called", () => {
