@@ -6,12 +6,21 @@ import type { Session } from "./Session.ts";
 const run = promisify(execFile);
 
 const executable = "claude";
-const readOnlyTools = "Read Grep Glob";
+export const readOnlyTools = "Read Grep Glob";
 export const standInModel = "claude-sonnet-5-5";
+
 const maxBuffer = 64 * 1024 * 1024;
 
 export class ClaudeSessionError extends Error {
   override name = "ClaudeSessionError";
+}
+
+export function leadArgs(): string[] {
+  return ["--allowedTools", `${readOnlyTools} Edit Bash`];
+}
+
+export function ownerArgs(): string[] {
+  return ["--model", standInModel, "--allowedTools", readOnlyTools];
 }
 
 export function questionerArgs(home: string): string[] {
@@ -58,6 +67,14 @@ export class ClaudeSession implements Session {
 
   static withArgs(args: readonly string[]): ClaudeSession {
     return new ClaudeSession(args);
+  }
+
+  static lead(): ClaudeSession {
+    return new ClaudeSession(leadArgs());
+  }
+
+  static owner(): ClaudeSession {
+    return new ClaudeSession(ownerArgs());
   }
 
   static questioner(home: string): ClaudeSession {

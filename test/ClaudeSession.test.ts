@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { ClaudeSession, ClaudeSessionError, designStandInArgs, designStandInPrompt, designerArgs, questionerArgs, standInArgs, standInModel, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { ClaudeSession, ClaudeSessionError, designStandInArgs, designStandInPrompt, designerArgs, leadArgs, ownerArgs, questionerArgs, readOnlyTools, standInArgs, standInModel, standInSystemPrompt } from "../src/ClaudeSession.ts";
 
 type Reply = { exitCode?: number; stdout: string };
 
@@ -125,6 +125,17 @@ test("designer args allow neither Write nor Bash", () => {
 
   assert.doesNotMatch(allowed, /\bWrite\b/);
   assert.doesNotMatch(allowed, /\bBash\b/);
+});
+
+test("lead args allow read, grep, glob, edit and bash and pin no model", () => {
+  const args = leadArgs();
+
+  assert.deepEqual(args, ["--allowedTools", `${readOnlyTools} Edit Bash`]);
+  assert.equal(args.includes("--model"), false);
+});
+
+test("owner args allow read-only tools and pin the stand-in model", () => {
+  assert.deepEqual(ownerArgs(), ["--model", standInModel, "--allowedTools", readOnlyTools]);
 });
 
 test("design stand-in args run on the stand-in model with read-only tools and the design stand-in prompt", () => {
