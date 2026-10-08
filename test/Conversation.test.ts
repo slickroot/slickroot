@@ -4,12 +4,21 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation, ConversationError, maxTurns } from "../src/Conversation.ts";
+import type { Sink } from "../src/Transcript.ts";
 import { Transcript } from "../src/Transcript.ts";
 import { FakeEcho } from "./support/FakeEcho.ts";
 import { FakeSession } from "./support/FakeSession.ts";
 
 const label = "story";
 const firstMessage = "Begin here.";
+
+class RecordingSink implements Sink {
+  readonly calls: [string, string][] = [];
+
+  append(speaker: string, text: string): void {
+    this.calls.push([speaker, text]);
+  }
+}
 
 function setup() {
   const transcript = Transcript.forRun(mkdtempSync(join(tmpdir(), "config-")), "project", "stories", new Date(), new FakeEcho());
@@ -21,7 +30,12 @@ function setup() {
   return { transcript, progress, finish, isFinished: () => finished };
 }
 
-function conversation(questioner: FakeSession, standIn: FakeSession, env: ReturnType<typeof setup>): Conversation {
+function conversation(
+  questioner: FakeSession,
+  standIn: FakeSession,
+  env: ReturnType<typeof setup>,
+  labels?: { questioner: string; standIn: string },
+): Conversation {
   return Conversation.between({
     questioner,
     standIn,
@@ -30,6 +44,7 @@ function conversation(questioner: FakeSession, standIn: FakeSession, env: Return
     label,
     firstMessage,
     finished: env.isFinished,
+    labels,
   });
 }
 
@@ -101,4 +116,53 @@ test("still finishes on the last turn", async () => {
   await conversation(questioner, FakeSession.replying("A"), env).run();
 
   assert.equal(questioner.received.length, maxTurns);
+});
+
+test("records the configured speaker labels instead of the default ones", async () => {
+  const env = setup();
+  const transcript = new RecordingSink();
+  const questioner = FakeSession.scripted([{ reply: "Q1" }, { reply: "Q2", before: env.finish }]);
+  const standIn = FakeSession.replying("A1");
+
+  await Conversation.between({
+    questioner,
+    standIn,
+    transcript,
+    stderr: (text) => env.progress.push(text),
+    label,
+    firstMessage,
+    finished: env.isFinished,
+    labels: { questioner: "Lead", standIn: "Owner" },
+  }).run();
+
+  assert.deepEqual(transcript.calls, [
+    ["slickroot", firstMessage],
+    ["Lead", "Q1"],
+    ["Owner", "A1"],
+    ["Lead", "Q2"],
+  ]);
+});
+
+test("records Questioner and StandIn when no labels are configured", async () => {
+  const env = setup();
+  const transcript = new RecordingSink();
+  const questioner = FakeSession.scripted([{ reply: "Q1" }, { reply: "Q2", before: env.finish }]);
+  const standIn = FakeSession.replying("A1");
+
+  await Conversation.between({
+    questioner,
+    standIn,
+    transcript,
+    stderr: (text) => env.progress.push(text),
+    label,
+    firstMessage,
+    finished: env.isFinished,
+  }).run();
+
+  assert.deepEqual(transcript.calls, [
+    ["slickroot", firstMessage],
+    ["Questioner", "Q1"],
+    ["StandIn", "A1"],
+    ["Questioner", "Q2"],
+  ]);
 });

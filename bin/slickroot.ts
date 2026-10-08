@@ -3,16 +3,21 @@ import { homedir } from "node:os";
 import { relative, resolve } from "node:path";
 import { ClaudeSession, standInSystemPrompt } from "../src/ClaudeSession.ts";
 import { slickrootConfigDir } from "../src/configDir.ts";
+import { bareName, ConversationCommand } from "../src/ConversationCommand.ts";
+import { Conversation } from "../src/Conversation.ts";
 import { DesignConversation } from "../src/DesignConversation.ts";
 import { StoryConversation } from "../src/StoryConversation.ts";
 import { GoalProgress } from "../src/goalProgress/GoalProgress.ts";
 import { Implementer } from "../src/Implementer.ts";
+import { LiveSink } from "../src/LiveSink.ts";
 import { Preflight, repoName } from "../src/Preflight.ts";
+import { Primed } from "../src/Primed.ts";
 import { SpecDirectory } from "../src/SpecDirectory.ts";
 import { SpecFile } from "../src/SpecFile.ts";
 import { SpecPublisher } from "../src/SpecPublisher.ts";
 import { TerminalEcho } from "../src/TerminalEcho.ts";
 import { Transcript } from "../src/Transcript.ts";
+import { WatchedPath } from "../src/WatchedPath.ts";
 
 const stderr = (text: string) => process.stderr.write(text);
 
@@ -31,6 +36,20 @@ try {
       echo: TerminalEcho.for(process.stderr),
       stderr,
     });
+  } else if (command === "conversation") {
+    const { leadSkill, ownerSkill, until, seed } = ConversationCommand.parse(process.argv.slice(3));
+    const echo = TerminalEcho.for(process.stderr);
+    const finished = WatchedPath.at(until);
+    await Conversation.between({
+      questioner: ClaudeSession.lead(),
+      standIn: Primed.with(ClaudeSession.owner(), `${ownerSkill} ${seed}`),
+      transcript: LiveSink.for(echo, "Lead"),
+      stderr,
+      label: bareName(leadSkill),
+      labels: { questioner: "Lead", standIn: "Owner" },
+      firstMessage: `${leadSkill} ${seed}`,
+      finished: () => finished.changed(),
+    }).run();
   } else if (command !== undefined) {
     throw new Error(`unknown command: ${command}`);
   } else {

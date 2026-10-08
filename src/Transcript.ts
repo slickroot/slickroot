@@ -2,7 +2,11 @@ import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Echo } from "./TerminalEcho.ts";
 
-export class Transcript {
+export interface Sink {
+  append(speaker: string, text: string): void;
+}
+
+export class Transcript implements Sink {
   readonly path: string;
   readonly #echo: Echo;
 
