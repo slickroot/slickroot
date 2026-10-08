@@ -5,8 +5,9 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { standInModel, designerArgs, designStandInArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
+import { standInModel, designerArgs, designStandInArgs, leadArgs, ownerArgs, questionerArgs, standInArgs, standInSystemPrompt } from "../src/ClaudeSession.ts";
 import { skill as implementSkill } from "../src/Implementer.ts";
+import { bareName } from "../src/ConversationCommand.ts";
 import { maxTurns } from "../src/Conversation.ts";
 import { opener } from "../src/StoryConversation.ts";
 
@@ -192,13 +193,53 @@ if (isStoryStandIn) {
   chmodSync(join(dir, "claude"), 0o755);
   return {
     dir,
-    argvs: () =>
-      existsSync(log)
-        ? readFileSync(log, "utf8")
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => JSON.parse(line) as string[])
-        : [],
+    argvs: () => argvsIn(log),
+  };
+}
+
+function argvsIn(log: string): string[][] {
+  return existsSync(log)
+    ? readFileSync(log, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as string[])
+    : [];
+}
+
+function fakeConversationClaude(writtenSpec: string): { dir: string; argvs: () => string[][] } {
+  const dir = tempDir("fake-claude-");
+  const log = join(dir, "argv.jsonl");
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ type: "commonjs" }));
+  writeFileSync(join(dir, "script.json"), JSON.stringify({ question, answer, writtenSpec, specBody }));
+  writeFileSync(
+    join(dir, "claude"),
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const dir = ${JSON.stringify(dir)};
+const argv = process.argv.slice(2);
+fs.appendFileSync(path.join(dir, "argv.jsonl"), JSON.stringify(argv) + "\\n");
+const script = JSON.parse(fs.readFileSync(path.join(dir, "script.json"), "utf8"));
+const reply = (sessionId, result) => process.stdout.write(JSON.stringify({ type: "result", is_error: false, session_id: sessionId, result }));
+const counter = path.join(dir, "lead-calls");
+const leadCalls = (fs.existsSync(counter) ? Number(fs.readFileSync(counter, "utf8")) : 0) + 1;
+if (argv.includes("--model")) {
+  reply("owner-session", script.answer);
+} else {
+  fs.writeFileSync(counter, String(leadCalls));
+  if (leadCalls === 1) {
+    reply("lead-session", script.question);
+  } else {
+    fs.writeFileSync(path.resolve(process.cwd(), script.writtenSpec), script.specBody);
+    reply("lead-session", "Wrote " + script.writtenSpec);
+  }
+}
+`,
+  );
+  chmodSync(join(dir, "claude"), 0o755);
+  return {
+    dir,
+    argvs: () => argvsIn(log),
   };
 }
 
@@ -461,6 +502,53 @@ test("the goal-keeper command without a goal-keeper.md is a silent no-op", () =>
   assert.equal(result.stderr, "");
   assert.equal(readFileSync(goalPath(xdg, repo), "utf8"), goal);
   assert.deepEqual(claude.argvs(), []);
+  assert.equal(existsSync(join(xdg, "slickroot", basename(repo), "runs")), false);
+});
+
+test("the conversation command runs one lead and owner conversation and stops when the watched path changes", () => {
+  const repo = gitRepo();
+  const xdg = tempDir("xdg-");
+  const writtenSpec = join("docs", "specs", "002-conversation.md");
+  const claude = fakeConversationClaude(writtenSpec);
+  const specsBefore = readdirSync(join(repo, "docs", "specs"));
+  const leadSkill = "/lead";
+  const ownerSkill = "/owner";
+  const seed = "Adding a todo from the terminal.";
+
+  const result = runSlickroot(
+    repo,
+    { PATH: `${claude.dir}${delimiter}${process.env.PATH}`, XDG_CONFIG_HOME: xdg },
+    ["conversation", "--lead", leadSkill, "--owner", ownerSkill, "--until", join("docs", "specs"), seed],
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "");
+
+  const newSpecs = readdirSync(join(repo, "docs", "specs")).filter((name) => !specsBefore.includes(name));
+  assert.deepEqual(newSpecs, ["002-conversation.md"]);
+  assert.equal(readFileSync(join(repo, writtenSpec), "utf8"), specBody);
+
+  const turn = (n: number) => `${bareName(leadSkill)} turn ${n}/${maxTurns}…\n`;
+  assert.deepEqual(blocks(result.stderr), [
+    `## slickroot\n\n${leadSkill} ${seed}\n\n${turn(1)}`,
+    `## Lead\n\n${question}\n\n`,
+    `## Owner\n\n${answer}\n\n${turn(2)}`,
+    `## Lead\n\nWrote ${writtenSpec}\n\n`,
+  ]);
+  assert.ok(!result.stderr.includes("\x1b["), result.stderr);
+
+  const argvs = claude.argvs();
+  assert.equal(argvs.length, 3);
+  const [firstLead, firstOwner, secondLead] = argvs;
+  assert.equal(firstLead![1], `${leadSkill} ${seed}`);
+  assert.ok(containsSequence(firstLead!, leadArgs()), JSON.stringify(firstLead));
+  assert.equal(firstLead!.includes("--model"), false);
+  assert.equal(firstOwner![1], `${ownerSkill} ${seed}\n\n${question}`);
+  assert.ok(containsSequence(firstOwner!, ownerArgs()), JSON.stringify(firstOwner));
+  assert.equal(secondLead![1], answer);
+  assert.ok(containsSequence(secondLead!, leadArgs()), JSON.stringify(secondLead));
+  assert.ok(secondLead!.includes("--resume"), JSON.stringify(secondLead));
+
   assert.equal(existsSync(join(xdg, "slickroot", basename(repo), "runs")), false);
 });
 
