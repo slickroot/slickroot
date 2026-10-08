@@ -1,5 +1,5 @@
 import type { Session } from "./Session.ts";
-import type { Transcript } from "./Transcript.ts";
+import type { Sink } from "./Transcript.ts";
 
 export const maxTurns = 30;
 
@@ -10,7 +10,7 @@ export class ConversationError extends Error {
 export type Participants = {
   questioner: Session;
   standIn: Session;
-  transcript: Transcript;
+  transcript: Sink;
   stderr: (text: string) => void;
   label: string;
   firstMessage: string;
