@@ -194,3 +194,7 @@ test("treats a backlog line with no verdict as untouched", () => {
 
   assert.ok(rendered.includes("#backlog\n\n* Move between texts vertically\nPlain line with no marker\n#notes\n"));
 });
+test("keeps the content it was parsed from", () => {
+  assert.equal(GoalDocument.parse(withDone).content, withDone);
+  assert.equal(GoalDocument.parse(withoutDone).content, withoutDone);
+});

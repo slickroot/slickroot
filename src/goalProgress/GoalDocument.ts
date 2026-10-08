@@ -18,6 +18,7 @@ type Section = { headerLine: string; headerAt: number; bodyFrom: number; bodyTo:
 
 export class GoalDocument {
   readonly backlog: readonly GoalLine[];
+  readonly content: string;
   readonly #lines: readonly string[];
   readonly #trailingNewline: boolean;
   readonly #backlog: Section;
@@ -32,6 +33,7 @@ export class GoalDocument {
     doneSection: Section | undefined,
     gap: readonly string[],
   ) {
+    this.content = lines.join("\n") + (trailingNewline ? "\n" : "");
     this.#lines = lines;
     this.#trailingNewline = trailingNewline;
     this.backlog = backlog;
